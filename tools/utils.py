@@ -84,3 +84,94 @@ def _load_json_no_comments(path):
 def get_config_value(key):
     config = _load_json_no_comments("config.json")
     return config.get(key)
+
+def sanitize_name(name, alphabet):
+    if not name:
+        return ""
+    sanitized = []
+    for c in name:
+        if c in alphabet:
+            sanitized.append(c)
+        elif c.isspace():
+            sanitized.append(" ")
+        else:
+            sanitized.append("?")
+    return "".join(sanitized)
+
+# ----------------------
+# Profanity filter
+# ----------------------
+LEET_MAP = str.maketrans({
+    "@": "a",
+    "4": "a",
+    "3": "e",
+    "1": "i",
+    "!": "i",
+    "0": "o",
+    "$": "s",
+    "5": "s",
+    "7": "t"
+})
+
+SEPARATOR_REGEX = re.compile(r"[\s\.\-_]+")
+
+def normalize_text(text: str) -> str:
+    text = text.lower()
+    text = text.translate(LEET_MAP)
+    return text
+
+def collapse_separators(text: str) -> str:
+    return SEPARATOR_REGEX.sub("", text)
+
+def collapse_repeats(text: str) -> str:
+    return re.sub(r"(.)\1+", r"\1", text)
+
+# Bad words list
+BAD_WORDS = {
+    "fuck","fucker","fucking","motherfucker","mf","shit","bullshit","bitch","bitches",
+    "ass","asshole","dick","dildo","cock","cocksucker","pussy","pussies","slut",
+    "whore","cum","cumming","jizz","jerkoff","handjob","blowjob","boob","boobs",
+    "tits","tit","nipple","porn","porno","pornhub","sex","sexy","s3x","suck",
+    "sucking","deepthroat","anal","anus","buttsex","butthole","balls","testicles",
+    "scrotum","masturbate","masturbation","orgasm","orgy","fetish","bdsm",
+    "bondage","spank","spanking","horny","hentai","rule34",
+    "idiot","moron","dumbass","retard","retarded","stupid","loser","noob",
+    "trash","garbage","clown","scumbag","dipshit","douche","douchebag",
+    "jackass","prick","tool","twat","wanker","shithead","dirtbag",
+    "kill","kys","die","suicide","murder","rapist","rape","raping",
+    "terrorist","bomb","massacre","genocide",
+    "cocaine","heroin","meth","weed","marijuana","crack","lsd","drugdealer",
+    "nigger", "nigga", "fag", "faggot",
+    "fuk","fuc","phuck","fucc","fuq","shiit","sh1t","b1tch","biatch",
+    "azzhole","a55hole","d1ck","d!ck","c0ck","p0rn","s3xy", "f@g", "f@ggot", "n1gger", "n1gga",
+    "nazi","hitler","kkk","satan","devil","racist","bigot",
+}
+
+def contains_bad_word(text: str) -> bool:
+    if not text:
+        return False
+    text = normalize_text(text)
+    collapsed = collapse_separators(text)
+    collapsed = collapse_repeats(collapsed)
+    for word in BAD_WORDS:
+        if word in text or word in collapsed:
+            return True
+    return False
+
+# ----------------------
+# Name validation
+# ----------------------
+def invalid_name(name):
+    if not name:
+        return "INVALID_DISPLAY_NAME"
+    if "%" in name:
+        return "INVALID_CHAR_DISPLAY_NAME"
+    elif "<c" in name:
+        return "INVALID_CHAR_DISPLAY_NAME"
+    elif "</" in name:
+        return "INVALID_CHAR_DISPLAY_NAME"
+    elif contains_bad_word(name):
+        return "BAD_WORD_DISPLAY_NAME"
+    elif re.match(r"^\s*$", name):
+        return "INVALID_WHITESPACE_DISPLAY_NAME"
+    return None

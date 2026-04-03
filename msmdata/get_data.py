@@ -8,8 +8,148 @@ conn = sqlite3.connect("static_dbs.db")
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
+conn_store = sqlite3.connect("store_data.db")
+conn_store.row_factory = sqlite3.Row
+cur_store = conn_store.cursor()
+
 skip_monster_ids = [30, 79, 80]
 skip_structure_ids = [232,233,234,235,236]
+
+bbs_urls = {
+    "BBS 1: Found You!": "https://www.youtube.com/watch?v=LBGxp0tVfcc",
+    "BBS 2: Dodge or die!": "https://www.youtube.com/watch?v=gkdlsbMgyjA",
+    "BBS 3: We will Escape.": "https://www.youtube.com/watch?v=FrVFegLNZGg",
+    "BBS 4: Mayday! Going Down!": "https://www.youtube.com/watch?v=pdcPSe0qDGE",
+    "BBS 10b: Theft and Bakery": "https://www.youtube.com/watch?v=dnGjugGffO4",
+    "BBS 11: Up, up and away!": "https://www.youtube.com/watch?v=iNuC_uSYnDc"
+}
+
+def add_entity_data(sfs_obj: SFSObject, entity_id: int, is_extra=False, extra_entity_data=None):
+    if is_extra:
+        entity = extra_entity_data
+    else:
+        cur.execute("SELECT * FROM entities WHERE entity_id = ?", (entity_id,))
+        row = cur.fetchone()
+        entity = dict(row) if row else None
+
+    if not entity:
+        return
+
+    # basic fields
+    sfs_obj.put_int("entity_id", int(entity["entity_id"]))
+    sfs_obj.put_utf_string("name", entity["name"] if entity["name"] is not None else "")
+    sfs_obj.put_utf_string("description", entity["description"] if entity["description"] is not None else "")
+    sfs_obj.put_utf_string("entity_type", entity["entity_type"] if entity["entity_type"] is not None else "")
+
+    # graphic JSON
+    if entity.get("graphic"):
+        try:
+            graphic_data = json.loads(entity["graphic"])
+            graphic = SFSObject()
+            for key, value in graphic_data.items():
+                if isinstance(value, bool):
+                    graphic.put_bool(key, value)
+                elif isinstance(value, int):
+                    graphic.put_int(key, value)
+                elif isinstance(value, float):
+                    graphic.put_double(key, value)
+                else:
+                    graphic.put_utf_string(key, str(value))
+            sfs_obj.put_sfs_object("graphic", graphic)
+        except Exception:
+            pass
+
+    # size / level / costs / timings
+    sfs_obj.put_int("size_x", int(entity["size_x"]))
+    sfs_obj.put_int("size_y", int(entity["size_y"]))
+    sfs_obj.put_int("level", int(entity["level"]))
+    sfs_obj.put_int("buildTime", int(entity["build_time"] * 1000))
+    sfs_obj.put_int("build_time", int(entity["build_time"] * 1000))
+    sfs_obj.put_int("cost_coins", int(entity["cost_coins"]))
+    sfs_obj.put_int("cost_eth_currency", int(entity["cost_eth_currency"]))
+    sfs_obj.put_int("cost_diamonds", int(entity["cost_diamonds"]))
+    sfs_obj.put_int("cost_sale", int(entity["cost_sale"]))
+
+    sfs_obj.put_utf_string("keywords", entity["keywords"] or "")
+    sfs_obj.put_utf_string("min_server_version", entity["min_server_version"] or "0.0")
+
+    # flags
+    #sfs_obj.put_int("movable", 1 if entity["movable"] else 0)
+    #sfs_obj.put_int("view_in_market", 1 if entity["view_in_market"] else 0)
+    #sfs_obj.put_int("premium", 1 if entity["premium"] else 0)
+
+    sfs_obj.put_bool("movable", entity["movable"])
+    sfs_obj.put_bool("view_in_market", entity["view_in_market"])
+    sfs_obj.put_bool("premium", entity["premium"])
+
+    # requirements
+    reqs = entity.get("requirements") or []
+    if isinstance(reqs, str):
+        reqs = json.loads(reqs)
+
+    req_arr = SFSArray()
+    for req in reqs:
+        req_obj = SFSObject()
+        if isinstance(req, dict):
+            req_obj.put_int("entity", int(req.get("entity", 0)))
+        else:
+            req_obj.put_int("entity", int(req))
+        req_arr.add_sfs_object(req_obj)
+    sfs_obj.put_sfs_array("requirements", req_arr)
+
+    # last changed / unknown / offset
+    sfs_obj.put_long("last_changed", int(time.time()) * 1000)
+    sfs_obj.put_int("xp", int(entity.get("xp", 0)))
+    sfs_obj.put_int("y_offset", int(entity["y_offset"]))
+    sfs_obj.put_int("sticker_offset", int(entity["y_offset"]))
+    sfs_obj.put_utf_string("fb_object_id", "")
+    sfs_obj.put_int("tier", 1)
+
+    '''
+    sfs_obj.put_utf_string("entity_type", entity["entity_type"])
+    sfs_obj.put_utf_string("name", entity["name"])
+    sfs_obj.put_utf_string("description", entity["description"])
+    sfs_obj.put_utf_string("keywords", entity.get("keywords", ""))
+
+    graphic_data = entity["graphic"] if is_extra else json.loads(entity["graphic"])
+    graphic = SFSObject()
+    for key, value in graphic_data.items():
+        graphic.put_utf_string(key, str(value))
+    sfs_obj.put_sfs_object("graphic", graphic)
+
+    sfs_obj.put_int("size_x", entity["size_x"])
+    sfs_obj.put_int("size_y", entity["size_y"])
+
+    sfs_obj.put_int("cost_coins", entity["cost_coins"])
+    sfs_obj.put_int("cost_eth_currency", entity["cost_eth_currency"])
+    sfs_obj.put_int("cost_diamonds", entity["cost_diamonds"])
+    sfs_obj.put_int("cost_sale", entity["cost_sale"])
+
+    sfs_obj.put_int("buildTime", entity["build_time"])
+    sfs_obj.put_int("level", entity["level"])
+
+    sfs_obj.put_bool("box_monster", entity.get("entity_type") == "box_monster")
+
+    requirements = entity["requirements"] if is_extra else json.loads(entity["requirements"])
+    req_array = SFSArray()
+    for req in requirements:
+        r = SFSObject()
+        for k, v in req.items():
+            if isinstance(v, int):
+                r.put_int(k, v)
+            else:
+                r.put_utf_string(k, str(v))
+        req_array.add_sfs_object(r)
+    sfs_obj.put_sfs_array("requirements", req_array)
+
+    sfs_obj.put_int("movable", entity["movable"])
+    sfs_obj.put_int("xp", entity["xp"])
+    sfs_obj.put_int("y_offset", entity["y_offset"])
+    sfs_obj.put_int("sticker_offset", entity.get("y_offset", 0))
+    sfs_obj.put_int("view_in_market", entity["view_in_market"])
+    sfs_obj.put_int("premium", entity["premium"])
+    sfs_obj.put_utf_string("min_server_version", entity["min_server_version"])
+    '''
 
 def get_genes():
     genes = SFSArray()
@@ -30,6 +170,8 @@ def get_genes():
 
         genes.add_sfs_object(gene)
 
+    print(f"Loaded {len(genes.value)} genes")
+
     return genes
 
 def get_quests():
@@ -38,77 +180,104 @@ def get_quests():
     cur.execute("SELECT * FROM quests")
     rows = cur.fetchall()
 
-    current_time_ms = int(time.time() * 1000)
-
     for row in rows:
-        quest = SFSObject()
+        # Create the wrapper that matches your Java "new" format
+        quest_wrapper = SFSObject()
 
-        quest.put_int("id", row["id"])
-        quest.put_int("quest_id", row["id"])
-        quest.put_utf_string("name", row["name"])
-        quest.put_utf_string("description", row["description"])
-        quest.put_utf_string("type", row["type"])
-        quest.put_utf_string("min_server_version", row["min_server_version"])
-        quest.put_long("last_changed", current_time_ms)
+        # === 1. Player Log Part (first item in "new") ===
+        log = SFSObject()
+        log.put_int("id", row["id"])
+        log.put_int("quest_id", row["id"])
+        log.put_int("user", 0)                    # filled per player later
+        log.put_utf_string("status", "false")     # default not completed
+        log.put_int("collected", 0)
+        log.put_int("new", row["initial"])
 
-        # --- GOALS ---
+        # === 2. Static Quest Data Part (second item) ===
+        static_data = SFSObject()
+        static_data.put_int("id", row["id"])
+        static_data.put_utf_string("name", row["name"])
+        static_data.put_utf_string("description", row["description"])
+        static_data.put_utf_string("type", row["type"])
+
+        # goals - manual construction from JSON string
         goals_array = SFSArray()
-        goals_data = json.loads(row["goals"]) if row["goals"] else []
+        if row["goals"] and row["goals"].strip():
+            try:
+                # Simple manual parse assuming it's a valid JSON array like: [ { "monster" : 3, "eval" : "=="} ]
+                # For production, you may want a better JSON parser, but keeping it simple as requested
+                import json
+                goals_list = json.loads(row["goals"])
+                for goal_dict in goals_list:
+                    goal_obj = SFSObject()
+                    for key, value in goal_dict.items():
+                        if isinstance(value, int):
+                            goal_obj.put_int(key, value)
+                        elif isinstance(value, str):
+                            goal_obj.put_utf_string(key, value)
+                        elif isinstance(value, list):
+                            sub_array = SFSArray()
+                            for item in value:
+                                if isinstance(item, int):
+                                    sub_array.add_int(item)
+                                else:
+                                    sub_array.add_utf_string(str(item))
+                            goal_obj.put_sfs_array(key, sub_array)
+                    goals_array.add_sfs_object(goal_obj)
+            except:
+                pass  # fallback to empty if parse fails
+        static_data.put_sfs_array("goals", goals_array)
 
-        for g in goals_data:
-            goal = SFSObject()
-            for k, v in g.items():
-                # Convert stringified lists to SFSArray of Ints
-                if isinstance(v, str) and v.startswith("[") and v.endswith("]"):
-                    try:
-                        arr = json.loads(v)
-                        sfs_arr = SFSArray()
-                        for item in arr:
-                            if isinstance(item, int):
-                                sfs_arr.add_int(item)
-                            else:
-                                sfs_arr.add_utf_string(str(item))
-                        goal.put_sfs_array(k, sfs_arr)
-                    except Exception:
-                        goal.put_utf_string(k, v)  # fallback if parsing fails
-                elif isinstance(v, int):
-                    goal.put_int(k, v)
-                elif isinstance(v, float):
-                    goal.put_double(k, v)
-                else:
-                    goal.put_utf_string(k, str(v))
-            goals_array.add_sfs_object(goal)
-
-        quest.put_sfs_array("goals", goals_array)
-
-        # --- REWARDS ---
-        rewards = SFSObject()
-        rewards_data = json.loads(row["rewards"]) if row["rewards"] else []
-
-        for reward_dict in rewards_data:
-            if isinstance(reward_dict, dict):
-                for k, v in reward_dict.items():
-                    if isinstance(v, int):
-                        rewards.put_int(k, v)
-                    elif isinstance(v, float):
-                        rewards.put_double(k, v)
-                    else:
-                        rewards.put_utf_string(k, str(v))
-
-        quest.put_sfs_object("rewards", rewards)
-
-        # --- NEXT ---
+        # next - manual construction
         next_array = SFSArray()
-        next_data = json.loads(row["next"]) if row["next"] else []
-        for n in next_data:
-            if isinstance(n, int):
-                next_array.add_int(n)
-            else:
-                next_array.add_utf_string(str(n))
-        quest.put_sfs_array("next", next_array)
+        if row["next"] and row["next"].strip():
+            try:
+                import json
+                next_list = json.loads(row["next"])
+                for item in next_list:
+                    if isinstance(item, int):
+                        next_array.add_int(item)
+                    else:
+                        next_array.add_utf_string(str(item))
+            except:
+                pass
+        static_data.put_sfs_array("next", next_array)
 
-        quests.add_sfs_object(quest)
+        # rewards - manual construction
+        rewards_obj = SFSObject()
+        if row["rewards"] and row["rewards"].strip():
+            try:
+                import json
+                rewards_dict = json.loads(row["rewards"])
+                for key, value in rewards_dict.items():
+                    if isinstance(value, int):
+                        rewards_obj.put_int(key, value)
+                    elif isinstance(value, str):
+                        rewards_obj.put_utf_string(key, value)
+            except:
+                pass
+        static_data.put_sfs_object("rewards", rewards_obj)
 
+        # Other fields
+        static_data.put_utf_string("sheet", row["sheet"])
+        static_data.put_utf_string("image", row["image"])
+        static_data.put_int("visible", row["visible"])
+        static_data.put_utf_string("min_server_version", row["min_server_version"])
+
+        if row["comment"]:
+            static_data.put_utf_string("comment", row["comment"])
+
+        # Build the "new" array exactly like your Java toSFS()
+        new_array = SFSArray()
+        new_array.add_sfs_object(log)
+        new_array.add_sfs_object(static_data)
+
+        quest_wrapper.put_sfs_array("new", new_array)
+
+        # Add to final quests list
+        quests.add_sfs_object(quest_wrapper)
+
+    print(f"Loaded {len(quests.value)} quests")
     return quests
 
 def get_islands():
@@ -148,9 +317,14 @@ def get_islands():
         # castle
         island.put_int("castle_structure_id", row["castle_structure_id"])
 
+        title, url = random.choice(list(bbs_urls.items()))
+
         # remix links
-        island.put_utf_string("remix_url", row["remix_url"])
-        island.put_utf_string("remix_url_2", row["remix_url_2"])
+        #island.put_utf_string("remix_url", row["remix_url"])
+        #island.put_utf_string("remix_url_2", row["remix_url_2"])
+        island.put_utf_string("remix_url", url)
+        island.put_utf_string("remix_url_2", url)
+
 
         # ----------------
         # GRAPHIC
@@ -160,7 +334,10 @@ def get_islands():
         graphic.put_utf_string("file", graphic_data["file"])
         graphic.put_utf_string("tileset", graphic_data["tileset"])
         graphic.put_utf_string("grid", "main_grid.bin")
+        graphic.put_utf_string("bg", graphic_data["bg"])
         island.put_sfs_object("graphic", graphic)
+
+        island.put_utf_string("grid", "main_grid.bin")
 
         # ----------------
         # MONSTERS
@@ -197,6 +374,8 @@ def get_islands():
         island.put_sfs_array("structures", structures)
 
         islands.add_sfs_object(island)
+
+    print(f"Loaded {len(islands.value)} islands")
 
     return islands
 
@@ -247,63 +426,13 @@ def get_structures():
 
         structure.put_sfs_object("extra", extra)
 
-        # ---------------------------
-        # ENTITY LOOKUP
-        # ---------------------------
-        cur.execute("SELECT * FROM entities WHERE entity_id = ?", (row["entity"],))
-        entity = cur.fetchone()
-
-        if entity:
-            structure.put_utf_string("entity_type", entity["entity_type"])
-            structure.put_utf_string("name", entity["name"])
-            structure.put_utf_string("description", entity["description"])
-            structure.put_utf_string("keywords", entity["keywords"] or "[]")
-            graphic_data = json.loads(entity["graphic"])
-            graphic = SFSObject()
-            for key, value in graphic_data.items():
-                graphic.put_utf_string(key, str(value))
-            structure.put_sfs_object("graphic", graphic)
-
-            structure.put_int("size_x", entity["size_x"])
-            structure.put_int("size_y", entity["size_y"])
-
-            structure.put_int("cost_coins", entity["cost_coins"])
-            structure.put_int("cost_eth_currency", entity["cost_eth_currency"])
-            structure.put_int("cost_diamonds", entity["cost_diamonds"])
-            structure.put_int("cost_sale", entity["cost_sale"])
-
-            structure.put_int("buildTime", entity["build_time"])
-            structure.put_int("level", entity["level"])
-
-            requirements_array = SFSArray()
-            for req in json.loads(entity["requirements"]):
-                r = SFSObject()
-                for k, v in req.items():
-                    r.put_int(k, v)
-                requirements_array.add_sfs_object(r)
-            structure.put_sfs_array("requirements", requirements_array)
-
-            structure.put_int("movable", entity["movable"])
-            structure.put_int("xp", entity["xp"])
-            structure.put_int("y_offset", entity["y_offset"])
-
-            structure.put_int("view_in_market", entity["view_in_market"])
-            structure.put_int("premium", entity["premium"])
-
-            structure.put_utf_string("min_server_version", entity["min_server_version"])
+        add_entity_data(structure, row["entity"])
 
         structures.add_sfs_object(structure)
 
-    return structures
+    print(f"Loaded {len(structures.value)} structures")
 
-bbs_urls = {
-    "BBS 1: Found You!": "https://www.youtube.com/watch?v=LBGxp0tVfcc",
-    "BBS 2: Dodge or die!": "https://www.youtube.com/watch?v=gkdlsbMgyjA",
-    "BBS 3: We will Escape.": "https://www.youtube.com/watch?v=FrVFegLNZGg",
-    "BBS 4: Mayday! Going Down!": "https://www.youtube.com/watch?v=pdcPSe0qDGE",
-    "BBS 10b: Theft and Bakery": "https://www.youtube.com/watch?v=dnGjugGffO4",
-    "BBS 11: Up, up and away!": "https://www.youtube.com/watch?v=iNuC_uSYnDc"
-}
+    return structures
 
 extra_monsters = [
 
@@ -387,14 +516,11 @@ extra_monsters = [
 def get_monsters():
     monsters = SFSArray()
 
-    # --- DB monsters ---
     cur.execute("SELECT * FROM monsters")
     rows = cur.fetchall()
 
-    # convert each tuple row into a dict
     db_rows = [dict(zip([col[0] for col in cur.description], r)) for r in rows]
 
-    # merge with extra monsters (empty list works fine)
     all_rows = db_rows + extra_monsters
 
     current_time_ms = int(time.time()) * 1000
@@ -407,9 +533,6 @@ def get_monsters():
 
         is_extra = row.get("is_extra", False)
 
-        # ---------------------------
-        # BASIC MONSTER DATA
-        # ---------------------------
         monster.put_int("monster_id", row["monster_id"])
         monster.put_int("id", row["monster_id"])
         monster.put_int("entity_id", row["entity"])
@@ -421,9 +544,8 @@ def get_monsters():
 
         monster.put_int("beds", row["beds"])
 
-        # ---------------------------
-        # HAPPINESS
-        # ---------------------------
+        monster.put_int("hide_friends", 0)
+
         happiness_data = row["happiness"] if is_extra else (json.loads(row["happiness"]) if row["happiness"] else [])
         happiness_array = SFSArray()
 
@@ -434,10 +556,9 @@ def get_monsters():
             happiness_array.add_sfs_object(h_obj)
 
         monster.put_sfs_array("happiness", happiness_array)
+        monster.put_sfs_array("likes", happiness_array)
+        monster.put_sfs_array("dislikes", SFSArray())
 
-        # ---------------------------
-        # NAMES
-        # ---------------------------
         names_data = row["names"] if is_extra else (json.loads(row["names"]) if row["names"] else [])
         names_array = SFSArray()
 
@@ -446,9 +567,6 @@ def get_monsters():
 
         monster.put_sfs_array("names", names_array)
 
-        # ---------------------------
-        # LEVEL / LINKS
-        # ---------------------------
         monster.put_int("level_up_xp", row["level_up_xp"])
         monster.put_utf_string("levelup_island", row["levelup_island"])
         title, url = random.choice(list(bbs_urls.items()))
@@ -458,73 +576,12 @@ def get_monsters():
         #monster.put_utf_string("link_title", row["link_title"])
         #monster.put_utf_string("link_address", row["link_address"])
 
-        # ---------------------------
-        # ENTITY DATA
-        # ---------------------------
-        if is_extra:
-            entity = row["entity_data"]
-        else:
-            cur.execute("SELECT * FROM entities WHERE entity_id = ?", (row["entity"],))
-            entity = cur.fetchone()
+        monster.put_bool("box_monster", False)
 
-        if entity:
-            monster.put_utf_string("entity_type", entity["entity_type"])
-            monster.put_utf_string("name", entity["name"])
-            monster.put_utf_string("description", entity["description"])
-            monster.put_utf_string("keywords", entity.get("keywords", "") if is_extra else (entity["keywords"] or ""))
+        monster.put_int("time_to_fill_sec", 0)
 
-            # Graphic
-            graphic_data = entity["graphic"] if is_extra else json.loads(entity["graphic"])
-            graphic = SFSObject()
-            for k, v in graphic_data.items():
-                graphic.put_utf_string(k, v)
-            monster.put_sfs_object("graphic", graphic)
+        add_entity_data(monster, row["entity"], is_extra=is_extra, extra_entity_data=row.get("entity_data"))
 
-            # Size
-            monster.put_int("size_x", entity["size_x"])
-            monster.put_int("size_y", entity["size_y"])
-
-            # Costs
-            monster.put_int("cost_coins", entity["cost_coins"])
-            monster.put_int("cost_eth_currency", entity["cost_eth_currency"])
-            monster.put_int("cost_diamonds", entity["cost_diamonds"])
-            monster.put_int("cost_sale", entity["cost_sale"])
-
-            # Build / level
-            monster.put_int("buildTime", entity["build_time"])
-            monster.put_int("level", entity["level"])
-
-            monster.put_bool("box_monster", entity["entity_type"] == "box_monster")
-
-            # Requirements
-            requirements = entity["requirements"] if is_extra else json.loads(entity["requirements"])
-            requirements_array = SFSArray()
-
-            for req in requirements:
-                ro = SFSObject()
-                for k, v in req.items():
-                    if isinstance(v, int):
-                        ro.put_int(k, v)
-                    else:
-                        ro.put_utf_string(k, str(v))
-                requirements_array.add_sfs_object(ro)
-
-            monster.put_sfs_array("requirements", requirements_array)
-
-            # Misc
-            monster.put_int("movable", entity["movable"])
-            monster.put_int("xp", entity["xp"])
-            monster.put_int("y_offset", entity["y_offset"])
-            monster.put_int("sticker_offset", entity["y_offset"])
-
-            monster.put_int("view_in_market", entity["view_in_market"])
-            monster.put_int("premium", entity["premium"])
-
-            monster.put_utf_string("min_server_version", entity["min_server_version"])
-
-        # ---------------------------
-        # LEVELS
-        # ---------------------------
         if is_extra:
             lvl_data = row["levels"]
         else:
@@ -548,6 +605,8 @@ def get_monsters():
 
         monsters.add_sfs_object(monster)
 
+    print(f"Loaded {len(monsters.value)} monsters")
+
     return monsters
 
 def get_levels():
@@ -565,7 +624,31 @@ def get_levels():
 
         levels.add_sfs_object(level)
 
+    print(f"Loaded {len(levels.value)} levels")
+
     return levels
+
+def get_levels_dict():
+    levels_dict = {}
+
+    cur.execute("""
+        SELECT level, xp, max_bakeries 
+        FROM level_xp 
+        ORDER BY level
+    """)
+    
+    rows = cur.fetchall()
+
+    for row in rows:
+        level_id = row["level"]
+
+        levels_dict[level_id] = {
+            "level": row["level"],
+            "xp": row["xp"],
+            "max_bakeries": row["max_bakeries"]
+        }
+
+    return levels_dict
 
 def get_scratchoffs():
     scratchoffs = SFSArray()
@@ -586,6 +669,8 @@ def get_scratchoffs():
         scratch_offer.put_utf_string("min_server_version", row["min_server_version"])
 
         scratchoffs.add_sfs_object(scratch_offer)
+    
+    print(f"Loaded {len(scratchoffs.value)} scratch-offs")
 
     return scratchoffs
 
@@ -660,6 +745,8 @@ def get_game_settings():
             obj.put_utf_string("value", default_value)
             game_settings.add_sfs_object(obj)
 
+    print(f"Loaded {len(game_settings.value)} game settings")
+
     return game_settings
 
 def get_torch_data():
@@ -676,6 +763,8 @@ def get_torch_data():
         torch.put_long("last_changed", int(time.time() * 1000))
 
         torch_data.add_sfs_object(torch)
+
+    print(f"Loaded {len(torch_data.value)} torches")
 
     return torch_data
 
@@ -714,4 +803,104 @@ def get_timed_events():
 
         timed_events.add_sfs_object(event)
 
+    print(f"Loaded {len(timed_events.value)} timed events")
+
     return timed_events
+
+def get_store_groups():
+    store_groups = SFSArray()
+
+    cur.execute("SELECT * FROM store_groups")
+    rows = cur.fetchall()
+
+    current_time_ms = int(time.time()) * 1000
+
+    for row in rows:
+        group = SFSObject()
+
+        group.put_int("id", row["storegroup_id"])
+        group.put_int("storegroup_id", row["storegroup_id"])
+
+        group.put_utf_string("name", row["group_name"])
+        group.put_int("currency", row["currency"])
+        group.put_utf_string("group_title", row["group_title"])
+        group.put_long("last_changed", current_time_ms)
+        group.put_utf_string("min_server_version", row["min_server_version"])
+
+        store_groups.add_sfs_object(group)
+
+    print(f"Loaded {len(store_groups.value)} store groups")
+
+    return store_groups
+
+def get_store_currencys():
+    store_currencys = SFSArray()
+
+    cur.execute("SELECT * FROM store_currency")
+    rows = cur.fetchall()
+
+    current_time_ms = int(time.time()) * 1000
+
+    for row in rows:
+        currency = SFSObject()
+
+        currency.put_int("storecur_id", row["storecur_id"])
+        currency.put_int("id", row["storecur_id"])
+        currency.put_utf_string("currency_name", row["currency_name"])
+        currency.put_int("starting_amount", row["starting_amount"])
+        currency.put_long("last_changed", current_time_ms)
+        currency.put_utf_string("min_server_version", row["min_server_version"])
+
+        store_currencys.add_sfs_object(currency)
+
+    print(f"Loaded {len(store_currencys.value)} store currencies")
+
+    return store_currencys
+
+def get_store_items():
+    store_items = SFSArray()
+
+    cur_store.execute("SELECT * FROM store_items")
+    rows = cur_store.fetchall()
+
+    current_time_ms = int(time.time()) * 1000
+
+    for row in rows:
+        if row["currency"] not in ["coins", "diamonds", "food"]:
+            continue
+
+        if "warm" in row["item_title"].lower():
+            continue
+
+        if row["min_server_version"] != "0.0":
+            continue
+
+        item = SFSObject()
+
+        item.put_int("id", int(row["storeitem_id"]))
+        item.put_int("item_id", int(row["storeitem_id"]))
+        item.put_utf_string("item_name", row["item_name"])
+        item.put_utf_string("item_title", row["item_title"])
+        item.put_utf_string("item_desc", row["item_desc"])
+        item.put_int("price", int(row["price"]))
+        item.put_int("consumable", int(row["consumable"]))
+        item.put_int("amount", int(row["amount"]))
+        item.put_int("max", int(row["max"]))
+        item.put_int("group_id", int(row["group_id"]))
+        item.put_int("sale_amount", 0)
+        item.put_int("max", -1)
+        item.put_int("currency_id", int(row["currency_id"]))
+        item.put_utf_string("sheet_id", row["sheet_id"])
+        item.put_utf_string("image_id", row["image_id"])
+        item.put_utf_string("ios_platform_id", row["ios_platform_id"])
+        item.put_utf_string("android_platform_id", row["android_platform_id"])
+        item.put_utf_string("amazon_platform_id", "")
+        item.put_long("last_changed", int(current_time_ms))
+        item.put_int("enabled", int(row["enabled"]))
+        item.put_utf_string("min_server_version", row["min_server_version"])
+
+        store_items.add_sfs_object(item)
+
+    print(f"Loaded {len(store_items.value)} store items")
+
+    return store_items

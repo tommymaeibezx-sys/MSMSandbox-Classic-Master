@@ -8,8 +8,9 @@ from tools.database import db_player, cur_player #type: ignore
 MAX_RESOURCE = 1_000_000_000
 
 class Player:
-    def __init__(self, bbb_id: int, display_name: str):
+    def __init__(self, bbb_id: int, display_name: str, user_id: int):
         self.bbb_id = bbb_id
+        self.user_id = user_id
         self.display_name = display_name
 
         self.islands = []
@@ -61,32 +62,52 @@ class Player:
         properties.add_sfs_object(tmp)
 
         tmp = SFSObject()
+        tmp.put_int("ethereal_currency", self.shards)
+        properties.add_sfs_object(tmp)
+
+        tmp = SFSObject()
         tmp.put_int("level", self.level)
         properties.add_sfs_object(tmp)
 
         return properties
 
-    def add_properties(self, coins=0, diamonds=0, food=0, xp=0, shards=0):
+    def _handle_level_up(self):
+        if not self._levels:
+            return
+
+        while self.level < 30:
+            next_level_data = self._levels.get(self.level + 1)
+            if not next_level_data:
+                break
+
+            xp_needed = next_level_data.get("xp", 999999999)
+
+            if self.xp >= xp_needed:
+                # Level up
+                self.level += 1
+                self.xp = 0
+            else:
+                break
+
+    def add_properties(self, coins=0, diamonds=0, food=0, xp=0, shards=0, level=0, set=False):
         coins = round(coins)
         diamonds = round(diamonds)
         food = round(food)
         xp = round(xp)
         shards = round(shards)
 
-        if (self.diamonds + diamonds < 0): 
-            print(self.diamonds)
+        # Check for negative balances
+        if self.diamonds + diamonds < 0:
             return False
-        if (self.coins + coins < 0):
-            print(self.coins)
+        if self.coins + coins < 0:
             return False
-        if (self.food + food < 0): 
-            print(self.food)
+        if self.food + food < 0:
             return False
-        if (self.xp + xp < 0): 
-            print(self.xp)
+        if self.xp + xp < 0:
             return False
-        if (self.shards + shards < 0): 
-            print(self.shards)
+        if self.shards + shards < 0:
+            return False
+        if self.level + level < 0:
             return False
 
         self.coins += coins
@@ -94,6 +115,18 @@ class Player:
         self.food += food
         self.xp += xp
         self.shards += shards
+        self.level += level
+
+        if set:
+            self.coins = coins
+            self.diamonds = diamonds
+            self.food = food
+            self.xp = xp
+            self.shards = shards
+            self.level = level
+
+        if xp > 0:
+            self._handle_level_up()
 
         self.coins = min(self.coins, MAX_RESOURCE)
         self.diamonds = min(self.diamonds, MAX_RESOURCE)
@@ -101,8 +134,10 @@ class Player:
         self.shards = min(self.shards, MAX_RESOURCE)
 
         cur_player.execute(
-            "UPDATE players SET coins = ?, diamonds = ?, food = ?, xp = ?, shards = ? WHERE bbb_id = ?",
-            (self.coins, self.diamonds, self.food, self.xp, self.shards, self.bbb_id)
+            """UPDATE players 
+               SET coins = ?, diamonds = ?, food = ?, xp = ?, level = ?, shards = ? 
+               WHERE bbb_id = ?""",
+            (self.coins, self.diamonds, self.food, self.xp, self.level, self.shards, self.bbb_id)
         )
         db_player.commit()
 
@@ -137,7 +172,7 @@ class Player:
         player_object.put_int("max_level", 30)
 
         player_object.put_long("bbb_id", self.bbb_id)
-        player_object.put_int("user_id", self.bbb_id)
+        player_object.put_int("user_id", self.user_id)
         player_object.put_long("referral", 0)
         player_object.put_long("active_island", self.active_island)
 
@@ -166,6 +201,9 @@ class Player:
         #player_object.put_int("daily_bonus_diamonds", 0)
         #player_object.put_int("daily_bonus_coins", 200)
         #player_object.put_int("reward_day", 1)
+
+        player_object.put_utf_string("c", "breedingAddOnBridged")
+        player_object.put_utf_string("client_tutorial_setup", "breedingAddOnBridged")
 
         player_object.put_sfs_array("quests", self.quests)
 

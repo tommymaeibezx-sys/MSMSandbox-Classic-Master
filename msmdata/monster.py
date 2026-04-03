@@ -18,7 +18,9 @@ class Monster:
         date_created: int = None,
         last_collection: int = None,
         muted: int = 0,
-        mega_data: dict = None
+        mega_data: dict = None,
+        parent_island_id: int = None,
+        parent_monster_id: int = None
     ):
         self.user_island_id = user_island_id
         self.user_monster_id = user_monster_id
@@ -37,6 +39,9 @@ class Monster:
 
         self.mega_data = mega_data or None
 
+        self.parent_island_id = parent_island_id or None
+        self.parent_monster_id = parent_monster_id or None
+
     def get_sfs_object(self):
         monster_obj = SFSObject()
 
@@ -44,7 +49,7 @@ class Monster:
         monster_obj.put_long("user_island_id", self.user_island_id)
         monster_obj.put_long("island", self.user_island_id)
 
-        monster_obj.put_long("monster", self.monster_id)
+        monster_obj.put_int("monster", self.monster_id)
 
         monster_obj.put_int("pos_x", self.x)
         monster_obj.put_int("pos_y", self.y)
@@ -73,6 +78,10 @@ class Monster:
         if self.mega_data:
             monster_obj.put_sfs_object("megamonster", self.mega_data.get_sfs_object())
 
-        monster_obj.put_utf_string("boxed_eggs", "[]")
+        if self.parent_island_id:
+            monster_obj.put_long("parent_island", self.parent_island_id)
+
+        if self.parent_monster_id:
+            monster_obj.put_long("parent_monster", self.parent_monster_id)
 
         return monster_obj

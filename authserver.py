@@ -91,6 +91,21 @@ def create_player_tables():
                 FOREIGN KEY(user_island_id) REFERENCES player_islands(user_island_id)
             )
         """,
+        "player_gi_monsters": """
+            CREATE TABLE player_gi_monsters (
+                user_monster_id INTEGER PRIMARY KEY,
+                monster_parent_id INTEGER,
+                island_parent_id INTEGER,
+                pos_x INTEGER,
+                pos_y INTEGER,
+                flip INTEGER DEFAULT 0,
+                muted INTEGER DEFAULT 0,
+                date_created INTEGER,
+                bbb_id INTEGER,
+                FOREIGN KEY(user_monster_id) REFERENCES player_monsters(user_monster_id)
+                    ON DELETE CASCADE
+            )
+        """,
         "player_structures": """
             CREATE TABLE player_structures (
                 user_structure_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,6 +132,19 @@ def create_player_tables():
                 laid_on INTEGER,
                 hatches_on INTEGER,
                 monster INTEGER,
+                user_structure_id INTEGER,
+                FOREIGN KEY(user_island_id) REFERENCES player_islands(user_island_id)
+            )
+        """,
+        "player_breeding": """
+            CREATE TABLE player_breeding (
+                user_breeding_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_island_id INTEGER,
+                started_on INTEGER,
+                completes_on INTEGER,
+                result INTEGER NOT NULL,
+                monster_1 INTEGER,
+                monster_2 INTEGER,
                 user_structure_id INTEGER,
                 FOREIGN KEY(user_island_id) REFERENCES player_islands(user_island_id)
             )
@@ -249,7 +277,7 @@ def get_friends(cur, bbb_id):
 
     rows = cur.fetchall()
 
-    friends = []
+    friends = [1]
 
     for u1, u2 in rows:
         if u1 == bbb_id:

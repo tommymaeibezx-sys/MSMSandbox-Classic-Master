@@ -1,19 +1,17 @@
 import sqlite3
 import time
+import platform
 
-from flask import g
+dev = platform.system() == "Windows"
 
-db_player = sqlite3.connect("player_data.db", check_same_thread=False)
+suffix = "dev" if dev else "prod"
+
+db_file_name = f"player_data_{suffix}.db"
+
+db_player = sqlite3.connect(db_file_name, timeout=10, check_same_thread=False)
 db_player.row_factory = sqlite3.Row
 
 db_player.execute("PRAGMA journal_mode=WAL;")
 db_player.commit()
 
 cur_player = db_player.cursor()
-
-def get_db():
-    if "db" not in g:
-        g.db = sqlite3.connect("player_data.db")
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA journal_mode=WAL;")
-    return g.db
